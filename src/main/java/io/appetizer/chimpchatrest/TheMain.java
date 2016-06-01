@@ -3,9 +3,12 @@ package io.appetizer.chimpchatrest;
 import com.android.chimpchat.ChimpChat;
 import com.android.chimpchat.core.IChimpDevice;
 import com.android.chimpchat.core.IChimpImage;
+import com.android.chimpchat.core.TouchPressType;
 import fi.iki.elonen.NanoHTTPD;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -19,8 +22,29 @@ public class TheMain extends NanoHTTPD {
     }
 
     @Override public Response serve(IHTTPSession session) {
-        final Map<String, List<String>> qs =
-                decodeParameters(session.getQueryParameterString());
+        Map<String, List<String>> qs = new HashMap<>();
+        String postBody = null;
+        if (Method.GET.equals(session.getMethod())) {
+            qs = decodeParameters(session.getQueryParameterString());
+        }
+        if (Method.POST.equals(session.getMethod())) {
+            InputStream is = session.getInputStream();
+            int size;
+            if (session.getHeaders().containsKey("content-length")) {
+                size = Integer.parseInt(session.getHeaders().get("content-length"));
+            } else {
+                size = 0;
+            }
+            byte buf[] = new byte[size];
+            try {
+                is.read(buf);
+            } catch (IOException e) {
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                        "SERVER INTERNAL ERROR: IOException: " + e.getMessage());
+            }
+            postBody = new String(buf);
+        }
+
         final String[] components = session.getUri().split("/");
         if (components.length <= 1) {
             // the root
@@ -44,12 +68,12 @@ public class TheMain extends NanoHTTPD {
             // screen shot
             case "takeSnapshot": return takeSnapshot(qs);
             // swiss knife
-            // case "shell": return shell(qs); // TODO shell will use POST
+            case "shell": return shell(postBody); // shell uses POST
             // intent story
             // case "broadcastIntent": return broadcastIntent(qs);
             // case "startActivity": return startActivity(qs);
             // screen magic
-            // case "touch": return touch(qs);
+            case "touch": return touch(qs);
             // case "drag": return drag(qs);
             case "favicon.ico": return newFixedLengthResponse("");
             default: return get404();
@@ -167,6 +191,36 @@ public class TheMain extends NanoHTTPD {
             IChimpImage img = device.takeSnapshot();
             img.writeToFile(path, format);
             return newFixedLengthResponse("taken");
+        }
+    }
+
+    /**
+     * /touch?x=<x axis pixel number>&y=<y axis pixel number >&t=<TYPE>
+     * Type could be "downAndUp" or "down" or "up" or "move"
+     */
+    private Response touch(Map<String, List<String>> qs) {
+        final int x = Integer.parseInt(getStringOrDefault(qs, "x", "0"));
+        final int y = Integer.parseInt(getStringOrDefault(qs, "y", "0"));
+        final String t = getStringOrDefault(qs, "t", "downAndUp");
+        if (device == null) {
+            return getDeviceNotReadyResponse();
+        } else {
+            device.touch(x, y, TouchPressType.fromIdentifier(t));
+            return newFixedLengthResponse("sent");
+        }
+    }
+
+    /**
+     * /shell
+     * Command transmitted as the POST body
+     */
+    private Response shell(String cmd) {
+        if (device == null) {
+            return getDeviceNotReadyResponse();
+        } else if (cmd == null) {
+            return newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, NanoHTTPD.MIME_PLAINTEXT, "use POST");
+        } else {
+            return newFixedLengthResponse(device.shell(cmd));
         }
     }
 
