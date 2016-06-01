@@ -1,0 +1,16 @@
+apply plugin: 'java'
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'io.appetizer.chimpchatrest.TheMain'
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile fileTree(dir: 'lib', include: ['*.jar'])
+    compile group: 'org.nanohttpd', name: 'nanohttpd', version: '2.2.0'
+}
