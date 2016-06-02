@@ -1,8 +1,13 @@
 apply plugin: 'java'
+apply plugin: 'application'
+
+mainClassName = 'io.appetizer.chimpchatrest.TheMain'
+sourceCompatibility = '1.7'
+targetCompatibility = '1.7'
 
 jar {
     manifest {
-        attributes 'Main-Class': 'io.appetizer.chimpchatrest.TheMain'
+        attributes 'Main-Class': '$mainClassName'
     }
 }
 
