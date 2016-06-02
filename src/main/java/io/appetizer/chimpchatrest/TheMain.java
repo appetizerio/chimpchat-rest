@@ -53,6 +53,7 @@ public class TheMain extends NanoHTTPD {
         switch (components[1]) {
             // connect to device
             case "init": return init(qs);
+            case "dispose": return dispose(qs);
             // reboot and wake
             case "reboot": return reboot(qs);
             case "wake": return wake(qs);
@@ -88,6 +89,19 @@ public class TheMain extends NanoHTTPD {
         final String serialno = getStringOrDefault(qs, "serialno", null);
         device = cc.waitForConnection(timeout, serialno);
         return newFixedLengthResponse("connected");
+    }
+
+    /**
+     * /dispose
+     */
+    private Response dispose(Map<String, List<String>> qs) {
+        if (device == null) {
+            return getDeviceNotReadyResponse();
+        } else {
+            device.dispose();
+            device = null;
+            return newFixedLengthResponse("disposed");
+        }
     }
 
     /**
