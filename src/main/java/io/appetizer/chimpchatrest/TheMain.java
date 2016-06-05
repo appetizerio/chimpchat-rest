@@ -71,7 +71,7 @@ public class TheMain extends NanoHTTPD {
             case "getProp": return getProp(qs);
             // keyboard input
             case "type": return type(qs);
-            // case "press": return press(qs);
+            case "press": return press(qs);
             // screen shot
             case "takeSnapshot": return takeSnapshot(qs);
             // swiss knife
@@ -180,7 +180,13 @@ public class TheMain extends NanoHTTPD {
             return getDeviceNotReadyResponse();
         } else {
             try {
-                getDDMDevice().pullFile(src, dst);
+                IDevice d = getDDMDevice();
+                if (d != null) {
+                    getDDMDevice().pullFile(src, dst);
+                } else {
+                    return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                            "Failed to control the device to pull file");
+                }
             } catch (IOException e) {
                 return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
                         "SERVER INTERNAL ERROR: IOException: " + e.getMessage());
@@ -208,7 +214,13 @@ public class TheMain extends NanoHTTPD {
             return getDeviceNotReadyResponse();
         } else {
             try {
-                getDDMDevice().pushFile(src, dst);
+                IDevice d = getDDMDevice();
+                if (d != null) {
+                    getDDMDevice().pushFile(src, dst);
+                } else {
+                    return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                            "Failed to control the device to push file");
+                }
             } catch (IOException e) {
                 return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
                         "SERVER INTERNAL ERROR: IOException: " + e.getMessage());
