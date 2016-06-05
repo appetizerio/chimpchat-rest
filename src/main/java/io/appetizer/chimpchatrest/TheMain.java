@@ -266,6 +266,21 @@ public class TheMain extends NanoHTTPD {
     }
 
     /**
+     * /touch?x=<x axis pixel number>&y=<y axis pixel number >&t=<TYPE>
+     * Type could be "downAndUp" or "down" or "up" or "move"
+     */
+    private Response press(Map<String, List<String>> qs) {
+        final String keyname = getStringOrDefault(qs, "keyname", "KEYCODE_HOME");
+        final String t = getStringOrDefault(qs, "t", "downAndUp");
+        if (device == null) {
+            return getDeviceNotReadyResponse();
+        } else {
+            device.press(keyname, TouchPressType.fromIdentifier(t));
+            return newFixedLengthResponse("sent");
+        }
+    }
+
+    /**
      * /takeSnapshot?path=<path to save the screenshot>&format=<the format of the image savedfile>
      */
     private Response takeSnapshot(Map<String, List<String>> qs) {
