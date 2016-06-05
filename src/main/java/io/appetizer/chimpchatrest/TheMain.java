@@ -1,13 +1,16 @@
 package io.appetizer.chimpchatrest;
 
 import com.android.chimpchat.ChimpChat;
+import com.android.chimpchat.adb.AdbChimpDevice;
 import com.android.chimpchat.core.IChimpDevice;
 import com.android.chimpchat.core.IChimpImage;
 import com.android.chimpchat.core.TouchPressType;
+import com.android.ddmlib.*;
 import fi.iki.elonen.NanoHTTPD;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,6 +63,9 @@ public class TheMain extends NanoHTTPD {
             // about apk installation and removal
             case "install": return install(qs);
             case "remove": return remove(qs);
+            // pull/push file
+            case "pull": return pull(qs);
+            case "push": return push(qs);
             // bootloader variables and system properties
             case "getVar": return getVar(qs);
             case "getProp": return getProp(qs);
@@ -75,7 +81,7 @@ public class TheMain extends NanoHTTPD {
             // case "startActivity": return startActivity(qs);
             // screen magic
             case "touch": return touch(qs);
-            // case "drag": return drag(qs);
+            case "drag": return drag(qs);
             case "favicon.ico": return newFixedLengthResponse("");
             default: return get404();
         }
@@ -85,9 +91,17 @@ public class TheMain extends NanoHTTPD {
      * /init?timeout=<timeout in milliseconds>?serialno=<device serial no string>
      */
     private Response init(Map<String, List<String>> qs) {
+        if (device != null) {
+            return newFixedLengthResponse("already connected");
+        }
         final long timeout = getStringOrDefault(qs, "timeout", 10);
-        final String serialno = getStringOrDefault(qs, "serialno", null);
-        device = cc.waitForConnection(timeout, serialno);
+        final String serialno = getStringOrDefault(qs, "serialno", ".*"); // it is actually a regex
+        try {
+            device = cc.waitForConnection(timeout, serialno);
+        } catch (Exception e) {
+            System.err.println("Chimpchat exception: " + e.toString());
+            e.printStackTrace();
+        }
         return newFixedLengthResponse("connected");
     }
 
@@ -142,6 +156,76 @@ public class TheMain extends NanoHTTPD {
         }
     }
 
+
+    /**
+     * /remove?pkg=<the package name to be removed>
+     */
+    private Response remove(Map<String, List<String>> qs) {
+        final String pkg = getStringOrDefault(qs, "pkg", null);
+        if (device == null) {
+            return getDeviceNotReadyResponse();
+        } else {
+            return newFixedLengthResponse(Boolean.toString(device.removePackage(pkg)));
+        }
+    }
+
+
+    /**
+     * /remove?pkg=<the package name to be removed>
+     */
+    private Response pull(Map<String, List<String>> qs) {
+        final String src = getStringOrDefault(qs, "src", null);
+        final String dst = getStringOrDefault(qs, "dst", null);
+        if (device == null) {
+            return getDeviceNotReadyResponse();
+        } else {
+            try {
+                getDDMDevice().pullFile(src, dst);
+            } catch (IOException e) {
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                        "SERVER INTERNAL ERROR: IOException: " + e.getMessage());
+            } catch (AdbCommandRejectedException e) {
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                        "SERVER INTERNAL ERROR: AdbCommandRejectedException: " + e.getMessage());
+            } catch (TimeoutException e) {
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                        "SERVER INTERNAL ERROR: TimeoutException: " + e.getMessage());
+            } catch (SyncException e) {
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                        "SERVER INTERNAL ERROR: SyncException: " + e.getMessage());
+            }
+            return newFixedLengthResponse("done");
+        }
+    }
+
+    /**
+     * /remove?pkg=<the package name to be removed>
+     */
+    private Response push(Map<String, List<String>> qs) {
+        final String src = getStringOrDefault(qs, "src", null);
+        final String dst = getStringOrDefault(qs, "dst", null);
+        if (device == null) {
+            return getDeviceNotReadyResponse();
+        } else {
+            try {
+                getDDMDevice().pushFile(src, dst);
+            } catch (IOException e) {
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                        "SERVER INTERNAL ERROR: IOException: " + e.getMessage());
+            } catch (AdbCommandRejectedException e) {
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                        "SERVER INTERNAL ERROR: AdbCommandRejectedException: " + e.getMessage());
+            } catch (TimeoutException e) {
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                        "SERVER INTERNAL ERROR: TimeoutException: " + e.getMessage());
+            } catch (SyncException e) {
+                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                        "SERVER INTERNAL ERROR: SyncException: " + e.getMessage());
+            }
+            return newFixedLengthResponse("done");
+        }
+    }
+
     /**
      * /getVar?var=<property name>
      *  Get the bootloader variable
@@ -165,18 +249,6 @@ public class TheMain extends NanoHTTPD {
             return getDeviceNotReadyResponse();
         } else {
             return newFixedLengthResponse(device.getSystemProperty(prop));
-        }
-    }
-
-    /**
-     * /remove?pkg=<the package name to be removed>
-     */
-    private Response remove(Map<String, List<String>> qs) {
-        final String pkg = getStringOrDefault(qs, "pkg", null);
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            return newFixedLengthResponse(Boolean.toString(device.removePackage(pkg)));
         }
     }
 
@@ -225,6 +297,29 @@ public class TheMain extends NanoHTTPD {
     }
 
     /**
+     * /drag?startx=xx&starty=xx&endx=xx&endy=xx&steps=xx&ms=xx
+     */
+    private Response drag(Map<String, List<String>> qs) {
+        final int startx = Integer.parseInt(getStringOrDefault(qs, "startx", "0"));
+        final int starty = Integer.parseInt(getStringOrDefault(qs, "starty", "0"));
+        final int endx = Integer.parseInt(getStringOrDefault(qs, "endx", "200"));
+        final int endy = Integer.parseInt(getStringOrDefault(qs, "endy", "200"));
+        final int steps = Integer.parseInt(getStringOrDefault(qs, "steps", "10"));
+        final int ms = Integer.parseInt(getStringOrDefault(qs, "ms", "100"));
+        if (device == null) {
+            return getDeviceNotReadyResponse();
+        } else {
+            try {
+                device.drag(startx, starty, endx, endy, steps, ms);
+            } catch (Exception e) {
+                System.err.println("Chimpchat drag failed: " + e.toString());
+                e.printStackTrace();
+            }
+            return newFixedLengthResponse("sent");
+        }
+    }
+
+    /**
      * /shell
      * Command transmitted as the POST body
      */
@@ -252,6 +347,32 @@ public class TheMain extends NanoHTTPD {
 
     private static long getStringOrDefault(Map<String, List<String>> qs, String k, long default_value) {
         return (qs.containsKey(k) ? Long.parseLong(qs.get(k).get(0)): default_value);
+    }
+
+    /**
+     * Get the bare DDM device object from the ChimpDevice object, by reflection.
+     * @return the DDM device or null if anything wrong
+     */
+    private IDevice getDDMDevice() {
+        if (device == null) {
+            return null;
+        }
+        if (!(device instanceof AdbChimpDevice)) {
+            System.err.println("ChimpDevice is not AdbChimpDevice, why?");
+            return null;
+        }
+        AdbChimpDevice chimp_device = (AdbChimpDevice) device;
+        try {
+            final Field f = AdbChimpDevice.class.getDeclaredField("device");
+            f.setAccessible(true);
+            return (IDevice) f.get(chimp_device);
+        } catch (NoSuchFieldException e) {
+            System.err.println("cannot get ddm device from the ChimpDevice");
+            return null;
+        } catch (IllegalAccessException e) {
+            System.err.println("failed to get the ddm device from a ChimpDevice");
+            return null;
+        }
     }
 
     public static void main(String[] args) {
