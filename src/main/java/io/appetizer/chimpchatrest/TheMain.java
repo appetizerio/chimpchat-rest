@@ -49,10 +49,17 @@ public class TheMain extends NanoHTTPD {
         }
 
         final String[] components = session.getUri().split("/");
+        // middleware
         if (components.length <= 1) {
             // the root
             return newFixedLengthResponse("chimpchat-rest: control an Android device via REST APIs");
         }
+        if (!components[1].equals("init")) {
+            if (device == null) {
+                return getDeviceNotReadyResponse();
+            }
+        }
+        // dispatching
         switch (components[1]) {
             // connect to device
             case "init": return init(qs);
@@ -109,13 +116,9 @@ public class TheMain extends NanoHTTPD {
      * /dispose
      */
     private Response dispose(Map<String, List<String>> qs) {
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            device.dispose();
-            device = null;
-            return newFixedLengthResponse("disposed");
-        }
+        device.dispose();
+        device = null;
+        return newFixedLengthResponse("disposed");
     }
 
     /**
@@ -123,24 +126,16 @@ public class TheMain extends NanoHTTPD {
      */
     private Response reboot(Map<String, List<String>> qs) {
         final String into = getStringOrDefault(qs, "into", null);
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            device.reboot(into);
-            return newFixedLengthResponse("rebooted");
-        }
+        device.reboot(into);
+        return newFixedLengthResponse("rebooted");
     }
 
     /**
      * /wake
      */
     private Response wake(Map<String, List<String>> qs) {
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            device.wake();
-            return newFixedLengthResponse("morning");
-        }
+        device.wake();
+        return newFixedLengthResponse("morning");
     }
 
     /**
@@ -148,12 +143,8 @@ public class TheMain extends NanoHTTPD {
      */
     private Response install(Map<String, List<String>> qs) {
         final String apk = getStringOrDefault(qs, "apk", null);
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            device.installPackage(apk);
-            return newFixedLengthResponse("installed");
-        }
+        device.installPackage(apk);
+        return newFixedLengthResponse("installed");
     }
 
 
@@ -162,11 +153,7 @@ public class TheMain extends NanoHTTPD {
      */
     private Response remove(Map<String, List<String>> qs) {
         final String pkg = getStringOrDefault(qs, "pkg", null);
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            return newFixedLengthResponse(Boolean.toString(device.removePackage(pkg)));
-        }
+        return newFixedLengthResponse(Boolean.toString(device.removePackage(pkg)));
     }
 
 
@@ -176,32 +163,28 @@ public class TheMain extends NanoHTTPD {
     private Response pull(Map<String, List<String>> qs) {
         final String src = getStringOrDefault(qs, "src", null);
         final String dst = getStringOrDefault(qs, "dst", null);
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            try {
-                IDevice d = getDDMDevice();
-                if (d != null) {
-                    getDDMDevice().pullFile(src, dst);
-                } else {
-                    return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
-                            "Failed to control the device to pull file");
-                }
-            } catch (IOException e) {
+        try {
+            IDevice d = getDDMDevice();
+            if (d != null) {
+                getDDMDevice().pullFile(src, dst);
+            } else {
                 return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
-                        "SERVER INTERNAL ERROR: IOException: " + e.getMessage());
-            } catch (AdbCommandRejectedException e) {
-                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
-                        "SERVER INTERNAL ERROR: AdbCommandRejectedException: " + e.getMessage());
-            } catch (TimeoutException e) {
-                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
-                        "SERVER INTERNAL ERROR: TimeoutException: " + e.getMessage());
-            } catch (SyncException e) {
-                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
-                        "SERVER INTERNAL ERROR: SyncException: " + e.getMessage());
+                        "Failed to control the device to pull file");
             }
-            return newFixedLengthResponse("done");
+        } catch (IOException e) {
+            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                    "SERVER INTERNAL ERROR: IOException: " + e.getMessage());
+        } catch (AdbCommandRejectedException e) {
+            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                    "SERVER INTERNAL ERROR: AdbCommandRejectedException: " + e.getMessage());
+        } catch (TimeoutException e) {
+            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                    "SERVER INTERNAL ERROR: TimeoutException: " + e.getMessage());
+        } catch (SyncException e) {
+            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                    "SERVER INTERNAL ERROR: SyncException: " + e.getMessage());
         }
+        return newFixedLengthResponse("done");
     }
 
     /**
@@ -210,32 +193,28 @@ public class TheMain extends NanoHTTPD {
     private Response push(Map<String, List<String>> qs) {
         final String src = getStringOrDefault(qs, "src", null);
         final String dst = getStringOrDefault(qs, "dst", null);
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            try {
-                IDevice d = getDDMDevice();
-                if (d != null) {
-                    getDDMDevice().pushFile(src, dst);
-                } else {
-                    return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
-                            "Failed to control the device to push file");
-                }
-            } catch (IOException e) {
+        try {
+            IDevice d = getDDMDevice();
+            if (d != null) {
+                getDDMDevice().pushFile(src, dst);
+            } else {
                 return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
-                        "SERVER INTERNAL ERROR: IOException: " + e.getMessage());
-            } catch (AdbCommandRejectedException e) {
-                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
-                        "SERVER INTERNAL ERROR: AdbCommandRejectedException: " + e.getMessage());
-            } catch (TimeoutException e) {
-                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
-                        "SERVER INTERNAL ERROR: TimeoutException: " + e.getMessage());
-            } catch (SyncException e) {
-                return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
-                        "SERVER INTERNAL ERROR: SyncException: " + e.getMessage());
+                        "Failed to control the device to push file");
             }
-            return newFixedLengthResponse("done");
+        } catch (IOException e) {
+            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                    "SERVER INTERNAL ERROR: IOException: " + e.getMessage());
+        } catch (AdbCommandRejectedException e) {
+            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                    "SERVER INTERNAL ERROR: AdbCommandRejectedException: " + e.getMessage());
+        } catch (TimeoutException e) {
+            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                    "SERVER INTERNAL ERROR: TimeoutException: " + e.getMessage());
+        } catch (SyncException e) {
+            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                    "SERVER INTERNAL ERROR: SyncException: " + e.getMessage());
         }
+        return newFixedLengthResponse("done");
     }
 
     /**
@@ -244,11 +223,7 @@ public class TheMain extends NanoHTTPD {
      */
     private Response getVar(Map<String, List<String>> qs) {
         final String var = getStringOrDefault(qs, "var", null);
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            return newFixedLengthResponse(device.getProperty(var));
-        }
+        return newFixedLengthResponse(device.getProperty(var));
     }
 
     /**
@@ -257,11 +232,7 @@ public class TheMain extends NanoHTTPD {
      */
     private Response getProp(Map<String, List<String>> qs) {
         final String prop = getStringOrDefault(qs, "prop", null);
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            return newFixedLengthResponse(device.getSystemProperty(prop));
-        }
+        return newFixedLengthResponse(device.getSystemProperty(prop));
     }
 
     /**
@@ -269,12 +240,8 @@ public class TheMain extends NanoHTTPD {
      */
     private Response type(Map<String, List<String>> qs) {
         final String s = getStringOrDefault(qs, "s", null);
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            device.type(s);
-            return newFixedLengthResponse("typed");
-        }
+        device.type(s);
+        return newFixedLengthResponse("typed");
     }
 
     /**
@@ -284,12 +251,8 @@ public class TheMain extends NanoHTTPD {
     private Response press(Map<String, List<String>> qs) {
         final String keyname = getStringOrDefault(qs, "keyname", "KEYCODE_HOME");
         final String t = getStringOrDefault(qs, "t", "downAndUp");
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            device.press(keyname, TouchPressType.fromIdentifier(t));
-            return newFixedLengthResponse("sent");
-        }
+        device.press(keyname, TouchPressType.fromIdentifier(t));
+        return newFixedLengthResponse("sent");
     }
 
     /**
@@ -298,13 +261,9 @@ public class TheMain extends NanoHTTPD {
     private Response takeSnapshot(Map<String, List<String>> qs) {
         final String path = getStringOrDefault(qs, "path", null);
         final String format = getStringOrDefault(qs, "format", null);
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            IChimpImage img = device.takeSnapshot();
-            img.writeToFile(path, format);
-            return newFixedLengthResponse("taken");
-        }
+        IChimpImage img = device.takeSnapshot();
+        img.writeToFile(path, format);
+        return newFixedLengthResponse("taken");
     }
 
     /**
@@ -315,12 +274,8 @@ public class TheMain extends NanoHTTPD {
         final int x = Integer.parseInt(getStringOrDefault(qs, "x", "0"));
         final int y = Integer.parseInt(getStringOrDefault(qs, "y", "0"));
         final String t = getStringOrDefault(qs, "t", "downAndUp");
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            device.touch(x, y, TouchPressType.fromIdentifier(t));
-            return newFixedLengthResponse("sent");
-        }
+        device.touch(x, y, TouchPressType.fromIdentifier(t));
+        return newFixedLengthResponse("sent");
     }
 
     /**
@@ -333,17 +288,13 @@ public class TheMain extends NanoHTTPD {
         final int endy = Integer.parseInt(getStringOrDefault(qs, "endy", "200"));
         final int steps = Integer.parseInt(getStringOrDefault(qs, "steps", "10"));
         final int ms = Integer.parseInt(getStringOrDefault(qs, "ms", "100"));
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else {
-            try {
-                device.drag(startx, starty, endx, endy, steps, ms);
-            } catch (Exception e) {
-                System.err.println("Chimpchat drag failed: " + e.toString());
-                e.printStackTrace();
-            }
-            return newFixedLengthResponse("sent");
+        try {
+            device.drag(startx, starty, endx, endy, steps, ms);
+        } catch (Exception e) {
+            System.err.println("Chimpchat drag failed: " + e.toString());
+            e.printStackTrace();
         }
+        return newFixedLengthResponse("sent");
     }
 
     /**
@@ -351,9 +302,7 @@ public class TheMain extends NanoHTTPD {
      * Command transmitted as the POST body
      */
     private Response shell(String cmd) {
-        if (device == null) {
-            return getDeviceNotReadyResponse();
-        } else if (cmd == null) {
+        if (cmd == null) {
             return newFixedLengthResponse(Response.Status.METHOD_NOT_ALLOWED, NanoHTTPD.MIME_PLAINTEXT, "use POST");
         } else {
             return newFixedLengthResponse(device.shell(cmd));
