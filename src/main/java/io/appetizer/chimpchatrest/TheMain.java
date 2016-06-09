@@ -199,14 +199,14 @@ public class TheMain extends NanoHTTPD {
     }
 
     /**
-     * /install?apk=<path to the apk file>
+     * /install?apk=<absolute path to the apk file>
+     *
      */
     private Response install(Map<String, List<String>> qs) {
         final String apk = getStringOrDefault(qs, "apk", null);
         device.installPackage(apk);
         return newFixedLengthResponse("installed");
     }
-
 
     /**
      * /remove?pkg=<the package name to be removed>
@@ -216,9 +216,9 @@ public class TheMain extends NanoHTTPD {
         return newFixedLengthResponse(Boolean.toString(device.removePackage(pkg)));
     }
 
-
     /**
-     * /remove?pkg=<the package name to be removed>
+     * /pull?src=<device path>&dst=<host file path>
+     *     both paths must be absolute paths
      */
     private Response pull(Map<String, List<String>> qs) {
         final String src = getStringOrDefault(qs, "src", null);
@@ -248,7 +248,8 @@ public class TheMain extends NanoHTTPD {
     }
 
     /**
-     * /remove?pkg=<the package name to be removed>
+     * /push?src=<host file path>&dst=<device file path>
+     *     both paths must be absolute paths
      */
     private Response push(Map<String, List<String>> qs) {
         final String src = getStringOrDefault(qs, "src", null);
