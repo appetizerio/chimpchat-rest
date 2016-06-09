@@ -16,6 +16,16 @@ import java.util.List;
 import java.util.Map;
 
 public class TheMain extends NanoHTTPD {
+    /**
+     * The default timeout for connecting to a device
+     */
+    private static final long DEFAULT_DEVICE_INIT_TIMEOUT = 20000;
+    /**
+     * The delay between two device initialization attempts.
+     * Empirical number, combined with the default timeout, it lets us try about 3 times.
+     */
+    private static final long DEVICE_INIT_ATTEMPT_INTERVAL = 6000;
+
     private final ChimpChat cc;
     private IChimpDevice device;
 
@@ -60,38 +70,62 @@ public class TheMain extends NanoHTTPD {
             }
         }
         // dispatching
-        switch (components[1]) {
-            // connect to device
-            case "init": return init(qs);
-            case "dispose": return dispose(qs);
-            // reboot and wake
-            case "reboot": return reboot(qs);
-            case "wake": return wake(qs);
-            // about apk installation and removal
-            case "install": return install(qs);
-            case "remove": return remove(qs);
-            // pull/push file
-            case "pull": return pull(qs);
-            case "push": return push(qs);
-            // bootloader variables and system properties
-            case "getVar": return getVar(qs);
-            case "getProp": return getProp(qs);
-            // keyboard input
-            case "type": return type(qs);
-            case "press": return press(qs);
-            // screen shot
-            case "takeSnapshot": return takeSnapshot(qs);
-            // swiss knife
-            case "shell": return shell(postBody); // shell uses POST
-            // intent story
-            // case "broadcastIntent": return broadcastIntent(qs);
-            // case "startActivity": return startActivity(qs);
-            // screen magic
-            case "touch": return touch(qs);
-            case "drag": return drag(qs);
-            case "favicon.ico": return newFixedLengthResponse("");
-            default: return get404();
+        try {
+            switch (components[1]) {
+                // connect to device
+                case "init":
+                    return init(qs);
+                case "dispose":
+                    return dispose(qs);
+                // reboot and wake
+                case "reboot":
+                    return reboot(qs);
+                case "wake":
+                    return wake(qs);
+                // about apk installation and removal
+                case "install":
+                    return install(qs);
+                case "remove":
+                    return remove(qs);
+                // pull/push file
+                case "pull":
+                    return pull(qs);
+                case "push":
+                    return push(qs);
+                // bootloader variables and system properties
+                case "getVar":
+                    return getVar(qs);
+                case "getProp":
+                    return getProp(qs);
+                // keyboard input
+                case "type":
+                    return type(qs);
+                case "press":
+                    return press(qs);
+                // screen shot
+                case "takeSnapshot":
+                    return takeSnapshot(qs);
+                // swiss knife
+                case "shell":
+                    return shell(postBody); // shell uses POST
+                // intent story
+                // case "broadcastIntent": return broadcastIntent(qs);
+                // case "startActivity": return startActivity(qs);
+                // screen magic
+                case "touch":
+                    return touch(qs);
+                case "drag":
+                    return drag(qs);
+                case "favicon.ico":
+                    return newFixedLengthResponse("");
+                default:
+                    return get404();
+            }
+        } catch (Exception e) {
+            System.err.println("Uncaught exception when handling requests: " + components[1]);
+            e.printStackTrace();
         }
+        return get404();
     }
 
     /**
@@ -101,15 +135,41 @@ public class TheMain extends NanoHTTPD {
         if (device != null) {
             return newFixedLengthResponse("already connected");
         }
-        final long timeout = getStringOrDefault(qs, "timeout", 10);
+        final long timeout = getStringOrDefault(qs, "timeout", DEFAULT_DEVICE_INIT_TIMEOUT);
         final String serialno = getStringOrDefault(qs, "serialno", ".*"); // it is actually a regex
-        try {
-            device = cc.waitForConnection(timeout, serialno);
-        } catch (Exception e) {
-            System.err.println("Chimpchat exception: " + e.toString());
-            e.printStackTrace();
+        final long start = System.currentTimeMillis();
+        int attempt = 1;
+        do {
+            System.out.println("Device " + serialno + " connection attempt #" + attempt);
+            try {
+                device = cc.waitForConnection(timeout, serialno);
+            } catch (Exception e) {
+                System.err.println("Chimpchat exception: " + e.toString());
+                e.printStackTrace();
+            }
+            System.out.println("Device " + serialno + " connection returns");
+            try {
+                Thread.sleep(DEVICE_INIT_ATTEMPT_INTERVAL);
+            } catch (InterruptedException e) {
+                System.err.println("Device initialization cannot sleep");
+            }
+            String prop = device.getSystemProperty("ro.product.model");
+            System.out.println("hello: " + prop);
+            if (prop == null || prop.trim().equals("")) {
+                device = null;
+                attempt++;
+            } else {
+                break;
+            }
+        } while (System.currentTimeMillis() - start < timeout);
+        if (device != null) {
+            System.out.println("connected");
+            return newFixedLengthResponse("connected");
+        } else {
+            System.err.println("not connected");
+            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, NanoHTTPD.MIME_PLAINTEXT,
+                    "device not connected within timeout");
         }
-        return newFixedLengthResponse("connected");
     }
 
     /**
